@@ -132,7 +132,7 @@ Worldwide Energy Resources) API:
     \item \textbf{Variables:} Temperature (T2M), Precipitation (PRECTOTCORR), Relative Humidity (RH2M), Wind Speed (WS2M)
     \item \textbf{Temporal Resolution:} Daily
     \item \textbf{Period:} 2018-2024
-    \item \textbf{Location:} Study area centroid (40.5167°N, 21.2685°E)
+    \item \textbf{Location:} Study area centroid (40.513°N, 21.281°E)
 \end{itemize}
 
 \subsubsection{Vector Data}
@@ -181,12 +181,24 @@ kastoria_landmarks = {
 The validation achieved 100\% coverage of key landmarks, confirming the polygon
 accurately represents the intended study area.
 
+\textbf{Scientific Importance of Landmark Validation:} The landmark-based
+validation approach serves multiple critical purposes: (1) ensures spatial
+accuracy of remotely digitized boundaries, (2) provides ground-truth validation
+for polygon coverage, (3) confirms inclusion of culturally and ecologically
+significant features, and (4) enables reproducible boundary definition for
+future studies. This rigorous validation is essential for scientific credibility,
+particularly when polygon boundaries significantly influence spectral analysis
+results through masking operations.
+
 \subsubsection{Raster Data Processing}
 
 A critical component of this analysis was the proper implementation of
 rasterio.mask for polygon-based raster clipping. Initial attempts using
-incorrect parameters resulted in 1D flattened arrays, which was resolved
-through proper parameter specification:
+incorrect parameters resulted in 1D flattened arrays due to improper geometry
+formatting and missing the \texttt{crop=True} parameter. The issue was
+identified when masked arrays returned unexpected dimensions (889,301,) instead
+of the expected 2D spatial arrays. This was resolved through proper parameter
+specification and geometry preparation:
 
 \begin{lstlisting}[caption=Correct rasterio.mask implementation]
 masked_array, masked_transform = mask(
@@ -202,6 +214,48 @@ masked_array, masked_transform = mask(
 
 This approach ensures precise spatial analysis limited to pixels within the
 study area polygon, providing scientifically accurate results.
+
+\subsubsection{Data Quality and Preprocessing}
+
+Quality assurance measures were implemented throughout the analysis workflow:
+
+\textbf{Raster Data Validation:} Sentinel-2 bands were validated for proper
+spatial extent, coordinate reference system consistency, and radiometric
+integrity. The 240-band structure was verified to ensure correct temporal
+sequencing (24 timesteps × 10 spectral bands).
+
+\textbf{Meteorological Data Quality:} NASA POWER data underwent quality checks
+including temporal continuity assessment, outlier detection, and statistical
+validation against regional climate normals.
+
+\textbf{Polygon Geometry Validation:} Beyond landmark checking, polygon
+topology was validated for self-intersection, proper closure, and coordinate
+precision to ensure robust masking operations.
+
+\textbf{Nodata Handling:} Comprehensive nodata value management using np.nan
+for raster operations ensures accurate statistical calculations and prevents
+artifacts in visualization and analysis results.
+
+\subsubsection{Temporal Analysis Scope and Rationale}
+
+For this analysis, we focused on the first 6 timesteps out of the 24 available
+timesteps in the Sentinel-2 dataset. This subset was selected for several
+reasons:
+
+\begin{enumerate}
+    \item \textbf{Methodological Validation:} Demonstrating the correct
+          implementation of polygon-based masking across multiple timesteps
+    \item \textbf{Computational Efficiency:} Processing 6 timesteps allows for
+          comprehensive analysis while maintaining reasonable computational
+          requirements
+    \item \textbf{Seasonal Representation:} The selected timesteps span
+          different seasonal conditions, enabling detection of temporal patterns
+    \item \textbf{Quality Assessment:} Validating data consistency and
+          methodology before scaling to the full temporal series
+\end{enumerate}
+
+The methodology established can be directly applied to analyze all 24 timesteps
+for comprehensive long-term monitoring studies.
 
 \subsubsection{Spectral Indices Calculation}
 
@@ -269,6 +323,17 @@ All data sources were successfully integrated:
     \label{fig:study_area}
 \end{figure}
 
+\subsubsection{RGB Band Visualization}
+
+Individual spectral bands and their composite visualization demonstrate the quality of the Sentinel-2 data:
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{figures/kastoria_rgb_bands.png}
+    \caption{RGB band visualization for timestep 0 showing individual spectral bands and composite. (a) Red band showing vegetation and urban areas; (b) Green band highlighting vegetation patterns; (c) Blue band indicating atmospheric and water features; (d) RGB composite providing natural color representation of the Kastoria study area with Lake Orestiada clearly visible as the dark water body.}
+    \label{fig:rgb_bands}
+\end{figure}
+
 \subsection{Objective 2: Raster Analysis and Spectral Indices}
 
 \subsubsection{Sentinel-2 Time Series Analysis}
@@ -297,6 +362,31 @@ to different land cover types:
     \label{fig:spectral_indices}
 \end{figure}
 
+\subsubsection{Spectral Indices Interpretation and Lake Kastoria Influence}
+
+The spectral indices analysis reveals the dominant influence of Lake Kastoria
+within the study area, providing valuable insights into land-water dynamics:
+
+\textbf{NDVI Analysis:} The negative mean NDVI (-0.262) is scientifically
+accurate and reflects the substantial water coverage. Water bodies absorb
+strongly in the near-infrared spectrum while reflecting in the visible red,
+resulting in negative NDVI values. The high standard deviation (±0.517)
+indicates the heterogeneous landscape mixing water, vegetation, and urban areas.
+
+\textbf{NDWI Analysis:} The positive NDWI values (mean: 0.267) confirm
+successful water body delineation. Lake Kastoria appears as high NDWI values
+(dark blue in visualization), demonstrating the index's effectiveness for water
+mapping in this Mediterranean environment.
+
+\textbf{BSI Analysis:} The moderate BSI values (mean: 0.142) indicate
+relatively low bare soil exposure, suggesting either vegetation cover or water
+dominance. The decreasing trend suggests potential vegetation recovery or
+seasonal greening.
+
+This multi-index approach provides complementary information: NDVI for overall
+vegetation assessment (despite water dominance), NDWI for precise water
+delineation, and BSI for soil exposure monitoring.
+
 \subsubsection{Time Series Analysis}
 
 The temporal analysis of spectral indices shows clear seasonal patterns and
@@ -304,14 +394,14 @@ trends:
 
 \begin{table}[H]
     \centering
-    \caption{Spectral Indices Statistics Summary}
+    \caption{Spectral Indices Statistics Summary (First 6 Timesteps)}
     \begin{tabular}{@{}lcccc@{}}
         \toprule
-        Index & Mean ± Std    & Min    & Max   & Trend      \\
+        Index & Mean ± Std     & Min    & Max   & Trend      \\
         \midrule
-        NDVI  & 0.425 ± 0.089 & 0.156  & 0.678 & Stable     \\
-        NDWI  & 0.234 ± 0.125 & -0.089 & 0.567 & Increasing \\
-        BSI   & 0.089 ± 0.067 & -0.123 & 0.234 & Decreasing \\
+        NDVI  & -0.262 ± 0.517 & -0.400 & 0.000 & Increasing \\
+        NDWI  & 0.267 ± 0.515  & -0.000 & 0.400 & Decreasing \\
+        BSI   & 0.142 ± 0.318  & 0.020  & 0.200 & Decreasing \\
         \bottomrule
     \end{tabular}
 \end{table}
@@ -327,12 +417,6 @@ The polygon masking successfully restricted analysis to 889,301 valid pixels
 within the study area boundary, representing 70.1\% spatial coverage. This
 demonstrates the effectiveness of the rasterio.mask implementation and ensures
 scientifically accurate spatial analysis limited to the defined study area.
-
-\textbf{Note on NDVI Values:} The negative mean NDVI (-0.262) reflects the 
-significant presence of Lake Kastoria within the study area, as water bodies 
-typically exhibit negative NDVI values due to strong absorption in the 
-near-infrared spectrum. This is scientifically accurate and expected for 
-areas with substantial water coverage.
 
 \subsection{Objective 3: Static Maps and Meteorological Analysis}
 
@@ -355,15 +439,15 @@ with spectral indices:
 
 \begin{table}[H]
     \centering
-    \caption{Meteorological Statistics (2018-2023)}
+    \caption{Meteorological Statistics (2018-2024)}
     \begin{tabular}{@{}lcccc@{}}
         \toprule
-        Variable               & Mean ± Std  & Min  & Max  & Trend      \\
+        Variable               & Mean ± Std   & Min  & Max  & Trend      \\
         \midrule
-        Temperature (°C)       & 12.4 ± 8.9  & -8.2 & 29.7 & Increasing \\
-        Precipitation (mm/day) & 1.8 ± 3.4   & 0.0  & 28.9 & Stable     \\
-        Humidity (\%)          & 68.2 ± 15.7 & 23.1 & 96.8 & Stable     \\
-        Wind Speed (m/s)       & 2.1 ± 1.1   & 0.3  & 7.8  & Decreasing \\
+        Temperature (°C)       & 11.68 ± 8.57 & -8.2 & 29.7 & Increasing \\
+        Precipitation (mm/day) & 1.89 ± 4.20  & 0.0  & 52.2 & Stable     \\
+        Humidity (\%)          & 71.01 ± 16.97& 24.8 & 99.5 & Stable     \\
+        Wind Speed (m/s)       & 1.81 ± 0.80  & 0.45 & 5.94 & Decreasing \\
         \bottomrule
     \end{tabular}
 \end{table}
@@ -375,10 +459,31 @@ with spectral indices:
     \label{fig:met_timeseries}
 \end{figure}
 
-\subsubsection{Seasonal Analysis}
+\subsubsection{Meteorological-Spectral Correlations}
 
-Monthly aggregation reveals distinct seasonal patterns in both meteorological
-and spectral data:
+The integration of meteorological and spectral data reveals important
+environmental correlations:
+
+\textbf{Temperature-Vegetation Relationship:} The seasonal temperature patterns
+(Spring: 9.4°C to Summer: 22.0°C) correlate with the NDVI increasing trend
+observed in the time series, suggesting vegetation response to warming
+temperatures during the growing season.
+
+\textbf{Precipitation Influence:} The high precipitation variability (1.89 ±
+4.20 mm/day) with winter maximum aligns with NDWI patterns, indicating seasonal
+water availability changes that affect both lake levels and surrounding
+vegetation moisture.
+
+\textbf{Humidity and Water Bodies:} The stable relative humidity (71.01 ±
+16.97\%) reflects Lake Kastoria's moderating influence on local microclimate,
+demonstrating the importance of water bodies in regional climate regulation.
+
+This multi-sensor approach enables comprehensive environmental monitoring that
+captures both immediate spectral responses and underlying meteorological
+drivers, essential for understanding ecosystem dynamics in Mediterranean
+lake environments.
+
+\subsubsection{Seasonal Analysis}
 
 \begin{figure}[H]
     \centering
@@ -399,6 +504,28 @@ needs:
     \item \textbf{Advanced Application:} Enhanced functionality using Leafmap
     \item \textbf{Analysis Dashboard:} Results-focused interface with embedded analytics
 \end{enumerate}
+
+\subsubsection{Web Services Integration Challenges and Solutions}
+
+The integration of OGC web services from geodata.gov.gr presented several
+technical challenges that required adaptive solutions:
+
+\textbf{WFS Connectivity Issues:} Initial attempts to access Greek geodata
+portal WFS services encountered connectivity limitations. The system
+implemented fallback mechanisms, creating alternative administrative boundaries
+when live services were unavailable.
+
+\textbf{CRS Compatibility:} Ensuring proper coordinate reference system
+alignment between the study area polygon (EPSG:4326), raster data, and WMS
+services required careful transformation and validation.
+
+\textbf{Service Performance:} WMS layer integration was optimized for web
+performance while maintaining cartographic quality, balancing data richness
+with interactive responsiveness.
+
+These challenges highlight the importance of robust error handling and
+alternative data strategies when developing operational geospatial web
+applications that depend on external services.
 
 \subsubsection{Technical Implementation}
 
@@ -437,17 +564,6 @@ The web applications provide comprehensive interactive functionality:
     \label{fig:web_app}
 \end{figure}
 
-\subsubsection{RGB Band Visualization}
-
-Individual spectral bands and their composite visualization demonstrate the quality of the Sentinel-2 data:
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=\textwidth]{figures/kastoria_rgb_bands.png}
-    \caption{RGB band visualization for timestep 0 showing individual spectral bands and composite. (a) Red band showing vegetation and urban areas; (b) Green band highlighting vegetation patterns; (c) Blue band indicating atmospheric and water features; (d) RGB composite providing natural color representation of the Kastoria study area with Lake Orestiada clearly visible as the dark water body.}
-    \label{fig:rgb_bands}
-\end{figure}
-
 \section{Conclusion}
 
 This study successfully demonstrates a comprehensive geospatial big data
@@ -455,22 +571,6 @@ analysis workflow for the Kastoria study area. The integration of
 multi-temporal Sentinel-2 imagery, meteorological observations, and
 administrative vector data provides a robust foundation for environmental
 monitoring and analysis.
-
-Key accomplishments include:
-
-\begin{enumerate}
-    \item Development of a scientifically rigorous methodology for polygon-based raster
-          analysis
-    \item Creation of comprehensive time series analysis revealing seasonal and long-term
-          environmental patterns
-    \item Integration of multiple data sources including satellite imagery,
-          meteorological data, and OGC web services
-    \item Production of professional interactive web applications suitable for scientific
-          communication and public engagement
-\end{enumerate}
-
-The methodology developed is transferable to other study areas and can serve as
-a template for similar geospatial analysis projects.
 
 \begin{thebibliography}{99}
 
