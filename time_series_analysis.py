@@ -4,15 +4,11 @@ import geopandas as gpd
 import matplotlib.pyplot as plt
 import seaborn as sns
 from shapely.geometry import Point, Polygon
-import folium
-import requests
-from datetime import datetime, timedelta
 import warnings
 warnings.filterwarnings('ignore')
 
 # Additional imports for web services
 from owslib.wfs import WebFeatureService
-from owslib.wms import WebMapService
 import contextily as ctx
 
 class KastoriaTimeSeriesAnalyzer:
@@ -21,17 +17,21 @@ class KastoriaTimeSeriesAnalyzer:
     - Static maps with multiple data sources
     - Meteorological time series visualization
     - Integration with geodata.gov.gr services
+    - Complete 24-timestep spectral indices integration
     """
     
     def __init__(self, study_area_path="kastoria_study_area.geojson", 
-                 meteorological_data_path="kastoria_meteorological_data.csv"):
+                 meteorological_data_path="kastoria_meteorological_data.csv",
+                 spectral_indices_path="kastoria_spectral_indices_timeseries_complete.csv"):  # Updated filename
         """
-        Initialize the time series analyzer.
+        Initialize the time series analyzer with complete spectral analysis integration.
         """
         self.study_area_path = study_area_path
         self.meteorological_data_path = meteorological_data_path
+        self.spectral_indices_path = spectral_indices_path  # Added spectral indices path
         self.study_area = None
         self.meteorological_data = None
+        self.spectral_indices_data = None  # Added spectral indices data
         self.meteorological_point = None
         self.administrative_data = {}
         self.transportation_data = {}
@@ -42,9 +42,9 @@ class KastoriaTimeSeriesAnalyzer:
         
     def load_data(self):
         """
-        Load study area polygon and meteorological data.
+        Load study area, meteorological data, and complete spectral indices analysis.
         """
-        print("🔄 Loading study area and meteorological data...")
+        print("🔄 Loading study area, meteorological data, and spectral indices...")
         
         # Load study area polygon
         try:
@@ -76,6 +76,22 @@ class KastoriaTimeSeriesAnalyzer:
         except Exception as e:
             print(f"   ❌ Error loading meteorological data: {e}")
             return False
+        
+        # Load complete spectral indices analysis
+        try:
+            self.spectral_indices_data = pd.read_csv(self.spectral_indices_path)
+            print(f"   ✅ Spectral indices data loaded: {len(self.spectral_indices_data)} timesteps (COMPLETE ANALYSIS)")
+            
+            # Display available spectral indices
+            spectral_columns = [col for col in self.spectral_indices_data.columns if any(idx in col for idx in ['NDVI', 'NDWI', 'BSI'])]
+            unique_indices = list(set([col.split('_')[0] for col in spectral_columns if '_' in col]))
+            print(f"   ✅ Available spectral indices: {unique_indices}")
+            print(f"   ✅ Complete temporal coverage: {len(self.spectral_indices_data)} timesteps analyzed")
+            
+        except Exception as e:
+            print(f"   ⚠️ Error loading spectral indices data: {e}")
+            print(f"   ⚠️ Continuing without spectral indices integration")
+            self.spectral_indices_data = None
         
         return True
     
@@ -501,11 +517,122 @@ class KastoriaTimeSeriesAnalyzer:
         
         return fig
     
+    def create_integrated_time_series_analysis(self, figsize=(15, 12)):
+        """
+        Create integrated time series analysis combining meteorological and spectral data.
+        """
+        print("📊 Creating integrated meteorological and spectral time series analysis...")
+        
+        if self.spectral_indices_data is None:
+            print("❌ No spectral indices data available for integration")
+            return self.plot_meteorological_timeseries(figsize)
+        
+        # Create comprehensive integrated plot
+        fig, axes = plt.subplots(3, 2, figsize=figsize)
+        axes = axes.flatten()
+        
+        # Plot 1: Temperature time series
+        ax1 = axes[0]
+        if 'T2M' in self.meteorological_data.columns:
+            ax1.plot(self.meteorological_data['date'], self.meteorological_data['T2M'], 'r-', linewidth=1, alpha=0.7)
+            temp_mean = self.meteorological_data['T2M'].mean()
+            ax1.axhline(temp_mean, color='red', linestyle=':', alpha=0.6, label=f'Mean: {temp_mean:.1f}°C')
+            ax1.set_title('Temperature Time Series (2018-2024)')
+            ax1.set_ylabel('Temperature (°C)')
+            ax1.grid(True, alpha=0.3)
+            ax1.legend()
+        
+        # Plot 2: NDVI complete time series
+        ax2 = axes[1]
+        if 'NDVI_mean' in self.spectral_indices_data.columns:
+            ax2.plot(self.spectral_indices_data['timestep'], self.spectral_indices_data['NDVI_mean'], 
+                    'g-o', linewidth=2, markersize=4, label='NDVI Mean')
+            if 'NDVI_std' in self.spectral_indices_data.columns:
+                ax2.fill_between(self.spectral_indices_data['timestep'], 
+                               self.spectral_indices_data['NDVI_mean'] - self.spectral_indices_data['NDVI_std'],
+                               self.spectral_indices_data['NDVI_mean'] + self.spectral_indices_data['NDVI_std'],
+                               alpha=0.2, color='green')
+            
+            ndvi_mean = self.spectral_indices_data['NDVI_mean'].mean()
+            ax2.set_title(f'NDVI Complete Time Series (24 timesteps)\nMean: {ndvi_mean:.3f}')
+            ax2.set_ylabel('NDVI Value')
+            ax2.set_xlabel('Timestep')
+            ax2.grid(True, alpha=0.3)
+            ax2.legend()
+        
+        # Plot 3: Precipitation time series
+        ax3 = axes[2]
+        if 'PRECTOTCORR' in self.meteorological_data.columns:
+            ax3.plot(self.meteorological_data['date'], self.meteorological_data['PRECTOTCORR'], 
+                    'b-', linewidth=1, alpha=0.7)
+            precip_mean = self.meteorological_data['PRECTOTCORR'].mean()
+            ax3.axhline(precip_mean, color='blue', linestyle=':', alpha=0.6, label=f'Mean: {precip_mean:.1f} mm/day')
+            ax3.set_title('Precipitation Time Series (2018-2024)')
+            ax3.set_ylabel('Precipitation (mm/day)')
+            ax3.grid(True, alpha=0.3)
+            ax3.legend()
+        
+        # Plot 4: NDWI complete time series
+        ax4 = axes[3]
+        if 'NDWI_mean' in self.spectral_indices_data.columns:
+            ax4.plot(self.spectral_indices_data['timestep'], self.spectral_indices_data['NDWI_mean'], 
+                    'b-o', linewidth=2, markersize=4, label='NDWI Mean')
+            if 'NDWI_std' in self.spectral_indices_data.columns:
+                ax4.fill_between(self.spectral_indices_data['timestep'], 
+                               self.spectral_indices_data['NDWI_mean'] - self.spectral_indices_data['NDWI_std'],
+                               self.spectral_indices_data['NDWI_mean'] + self.spectral_indices_data['NDWI_std'],
+                               alpha=0.2, color='blue')
+            
+            ndwi_mean = self.spectral_indices_data['NDWI_mean'].mean()
+            ax4.set_title(f'NDWI Complete Time Series (24 timesteps)\nMean: {ndwi_mean:.3f}')
+            ax4.set_ylabel('NDWI Value')
+            ax4.set_xlabel('Timestep')
+            ax4.grid(True, alpha=0.3)
+            ax4.legend()
+        
+        # Plot 5: Relative Humidity
+        ax5 = axes[4]
+        if 'RH2M' in self.meteorological_data.columns:
+            ax5.plot(self.meteorological_data['date'], self.meteorological_data['RH2M'], 
+                    'g-', linewidth=1, alpha=0.7)
+            humidity_mean = self.meteorological_data['RH2M'].mean()
+            ax5.axhline(humidity_mean, color='green', linestyle=':', alpha=0.6, label=f'Mean: {humidity_mean:.1f}%')
+            ax5.set_title('Relative Humidity Time Series (2018-2024)')
+            ax5.set_ylabel('Relative Humidity (%)')
+            ax5.set_xlabel('Date')
+            ax5.grid(True, alpha=0.3)
+            ax5.legend()
+        
+        # Plot 6: BSI complete time series
+        ax6 = axes[5]
+        if 'BSI_mean' in self.spectral_indices_data.columns:
+            ax6.plot(self.spectral_indices_data['timestep'], self.spectral_indices_data['BSI_mean'], 
+                    'brown', marker='o', linewidth=2, markersize=4, label='BSI Mean')
+            if 'BSI_std' in self.spectral_indices_data.columns:
+                ax6.fill_between(self.spectral_indices_data['timestep'], 
+                               self.spectral_indices_data['BSI_mean'] - self.spectral_indices_data['BSI_std'],
+                               self.spectral_indices_data['BSI_mean'] + self.spectral_indices_data['BSI_std'],
+                               alpha=0.2, color='brown')
+            
+            bsi_mean = self.spectral_indices_data['BSI_mean'].mean()
+            ax6.set_title(f'BSI Complete Time Series (24 timesteps)\nMean: {bsi_mean:.3f}')
+            ax6.set_ylabel('BSI Value')
+            ax6.set_xlabel('Timestep')
+            ax6.grid(True, alpha=0.3)
+            ax6.legend()
+        
+        plt.suptitle('Integrated Meteorological and Spectral Indices Analysis - Kastoria Study Area', fontsize=16)
+        plt.tight_layout()
+        plt.savefig('figures/kastoria_integrated_timeseries_complete.png', dpi=300)
+        plt.show()
+        
+        return fig
+
     def create_summary_statistics(self):
         """
-        Create comprehensive summary statistics.
+        Create comprehensive summary statistics including complete spectral analysis.
         """
-        print("📈 Creating summary statistics...")
+        print("📈 Creating comprehensive summary statistics with complete spectral analysis...")
         
         # Study area statistics
         study_area_utm = self.study_area.to_crs('EPSG:2100')
@@ -526,10 +653,41 @@ class KastoriaTimeSeriesAnalyzer:
                 'records': len(self.meteorological_data)
             }
         
-        # Print summary
-        print(f"\n{'='*60}")
-        print("KASTORIA STUDY AREA - SUMMARY STATISTICS")
-        print("="*60)
+        # Spectral indices statistics (complete analysis)
+        spectral_stats = {}
+        if self.spectral_indices_data is not None:
+            spectral_indices = ['NDVI', 'NDWI', 'BSI']
+            for index_name in spectral_indices:
+                mean_col = f'{index_name}_mean'
+                if mean_col in self.spectral_indices_data.columns:
+                    values = self.spectral_indices_data[mean_col]
+                    
+                    # Calculate seasonal amplitude
+                    seasonal_amplitude = values.max() - values.min()
+                    
+                    # Calculate trend
+                    x = np.arange(len(values))
+                    from scipy import stats
+                    slope, intercept, r_value, p_value, std_err = stats.linregress(x, values)
+                    trend_direction = "Increasing" if slope > 0 else "Decreasing"
+                    
+                    spectral_stats[index_name] = {
+                        'mean': values.mean(),
+                        'std': values.std(),
+                        'min': values.min(),
+                        'max': values.max(),
+                        'seasonal_amplitude': seasonal_amplitude,
+                        'trend_slope': slope,
+                        'trend_r_squared': r_value**2,
+                        'trend_p_value': p_value,
+                        'trend_direction': trend_direction,
+                        'timesteps': len(values)
+                    }
+        
+        # Print comprehensive summary
+        print(f"\n{'='*80}")
+        print("KASTORIA STUDY AREA - COMPREHENSIVE ANALYSIS SUMMARY")
+        print("="*80)
         
         print(f"\n📍 STUDY AREA:")
         print(f"   - Area: {area_km2:.2f} km²")
@@ -558,6 +716,18 @@ class KastoriaTimeSeriesAnalyzer:
             print(f"     Mean: {stats['mean']:.2f} ± {stats['std']:.2f}")
             print(f"     Range: {stats['min']:.2f} to {stats['max']:.2f}")
         
+        # Enhanced spectral indices summary
+        if spectral_stats:
+            print(f"\n🛰️ SPECTRAL INDICES (COMPLETE 24-TIMESTEP ANALYSIS):")
+            for index_name, stats in spectral_stats.items():
+                print(f"   - {index_name} Index:")
+                print(f"     Mean: {stats['mean']:.3f} ± {stats['std']:.3f}")
+                print(f"     Range: {stats['min']:.3f} to {stats['max']:.3f}")
+                print(f"     Seasonal amplitude: {stats['seasonal_amplitude']:.3f}")
+                print(f"     Trend: {stats['trend_direction']} (slope: {stats['trend_slope']:.4f})")
+                print(f"     Statistical significance: R² = {stats['trend_r_squared']:.3f}, p = {stats['trend_p_value']:.3f}")
+                print(f"     Temporal coverage: {stats['timesteps']} timesteps")
+        
         if 'boundaries' in self.administrative_data:
             print(f"\n🗺️ ADMINISTRATIVE CONTEXT:")
             print(f"   - Administrative regions: {len(self.administrative_data['boundaries'])}")
@@ -569,11 +739,12 @@ class KastoriaTimeSeriesAnalyzer:
             for road_type, count in road_types.items():
                 print(f"     {road_type.title()}: {count} segments")
         
-        print("="*60)
+        print("="*80)
         
         return {
             'study_area': {'area_km2': area_km2, 'perimeter_km': perimeter_km},
-            'meteorological': met_stats
+            'meteorological': met_stats,
+            'spectral_indices': spectral_stats
         }
 
 # Initialize the time series analyzer
@@ -582,10 +753,10 @@ print("="*70)
 
 analyzer = KastoriaTimeSeriesAnalyzer()
 
-# Step 1: Load data
-print("\nSTEP 1: Loading data...")
+# Step 1: Load all data including complete spectral analysis
+print("\nSTEP 1: Loading complete dataset...")
 if not analyzer.load_data():
-    print("❌ Failed to load data. Please check file paths.")
+    print("❌ Failed to load data. Please check file paths and ensure analyze.py has completed.")
     exit()
 
 # Step 2: Fetch administrative boundaries
@@ -600,16 +771,16 @@ analyzer.fetch_transportation_networks()
 print("\nSTEP 4: Creating static maps...")
 static_map_fig = analyzer.create_static_map()
 
-# Step 5: Plot meteorological time series
-print("\nSTEP 5: Creating meteorological time series plots...")
-timeseries_fig = analyzer.plot_meteorological_timeseries()
+# Step 5: Create integrated time series analysis (NEW)
+print("\nSTEP 5: Creating integrated meteorological and spectral time series...")
+integrated_fig = analyzer.create_integrated_time_series_analysis()
 
 # Step 6: Seasonal analysis
 print("\nSTEP 6: Creating seasonal analysis...")
 seasonal_fig = analyzer.plot_seasonal_analysis()
 
-# Step 7: Generate summary statistics
-print("\nSTEP 7: Generating summary statistics...")
+# Step 7: Generate comprehensive summary statistics
+print("\nSTEP 7: Generating comprehensive summary statistics...")
 summary_stats = analyzer.create_summary_statistics()
 
 # Display completion message
